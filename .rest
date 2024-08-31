@@ -1,0 +1,19 @@
+GET http://localhost:5000/
+location: kurunegla
+
+###
+POST https://falsk-api.el.r.appspot.com
+Content-Type: application/json
+
+{
+  "userid":"dsfsdfsdfsd",
+  "email":"kushan2k@gmail.com"
+}
+
+###
+PUT http://localhost:5000/
+Content-Type: application/json
+
+{
+    "userid":"sdfsdfsdfsdfsdfsdfsdfsd"
+}
