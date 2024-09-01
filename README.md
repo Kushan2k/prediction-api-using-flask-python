@@ -1,11 +1,17 @@
+1. **Clone the repository:**
+
+```bash
 git clone https://github.com/your-username/solo-traveller-api.git
 
-````
+```
 
 2. **Navigate to the project directory:**
+
 ```bash
 cd solo-traveller-api
-````
+```
+
+## Installation
 
 3. **Create a virtual environment:**
 
