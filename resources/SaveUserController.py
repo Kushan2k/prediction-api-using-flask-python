@@ -23,6 +23,7 @@ class SaveUserController(Resource):
     def get(self):
         
         # model=joblib.load('models/user_cat.joblib')
+
         return jsonify({"msg": "hello world"})
 
         
@@ -215,8 +216,29 @@ class PredictUserController(Resource):
         self.catagories=list(map(lambda x:x.to_dict()['name'].lower(),self.firestoreDB.collection('categories').stream()))
 
     def get(self):
-        print('came to get')
-        return jsonify({"msg": "prediction controller"})
+        
+        parser=reqparse.RequestParser()
+        parser.add_argument('uid',type=str,required=True,help="User ID is required",location='args')
+        parser.add_argument('email',type=str,required=True,help="Email is required",location='args')
+
+        args=parser.parse_args()
+        print(args)
+
+        uid=args['uid']
+        email=args['email']
+
+        query = {"$or": [{"email": email}, {"userid": uid}]}
+        # print("come to try")
+        user = self.collection.find_one(query, limit=1)
+
+        if not user:
+            return Response("user not found! ",status=404)
+        
+        resp_user={
+            'preferences':user['preferences'],
+            'personal_data':user['personal_data'],
+        }
+        return jsonify(resp_user)
 
     def post(self):
         print('came to post')
@@ -296,6 +318,9 @@ class PredictUserController(Resource):
             if shop['selectedCategory'].lower() in categories_for_user_type[predict.upper()]:
                 resp_shops.append(shop)
             
+            if(shop.get('items')==None):
+                    continue
+            
             items=shop['items']
             for item in items:
                 if item['category'].lower() in categories_for_user_type[predict.upper()]:
@@ -343,19 +368,20 @@ class ImageProcesingController(Resource):
             img = tf.expand_dims(img, axis=0)  # Add batch dimension
 
             predictions = model.predict(img)
-            print(predictions)
+            # print(predictions)
             best_one=np.argmax(predictions[0])
-            print(best_one)
+            # print(best_one)
             Labels= ['apple', 'banana', 'beetroot', 'bell pepper', 'cabbage', 'capsicum', 'carrot', 'cauliflower', 'chilli pepper', 'corn', 'cucumber', 'eggplant', 'garlic', 'ginger', 'grapes', 'jalepeno', 'kiwi', 'lemon', 'lettuce', 'mango', 'onion', 'orange', 'paprika', 'pear', 'peas', 'pineapple', 'pomegranate', 'potato', 'raddish', 'soy beans', 'spinach', 'sweetcorn', 'sweetpotato', 'tomato', 'turnip', 'watermelon']
 
-            print(len(Labels))
+            print('label count',len(Labels))
             prediction=Labels[best_one]
-            print(prediction)
+            print('prediction',prediction)
             
             stores=list(map(lambda x:x.to_dict(),self.firestoreDB.collection('stores').stream()))
             resp={}
+            resp['prediction']=prediction
             resp_shops=[]
-            print('came eher')
+            # print('came eher')
             cats={
                 'vegitable':['carrot','beetroot','turnip','sweetcorn','corn','cabbage','soy beans','cucumber','onion','lettuce','garlic','bell pepper','paprika','potato','capsicum','tomato','spinach','raddish','ginger'],
                 'fruit':['orange','banana','peas','eggplant','pineapple','pear','grapes','apple','pomegranate','watermelon','lemon','sweetpotato','kiwi','mango','chilli pepper']
@@ -367,7 +393,7 @@ class ImageProcesingController(Resource):
                     break
 
             for shop in stores:
-                print(shop)
+                # print(shop)
                 if shop['selectedCategory'].lower().find(predicted_category.lower())!=-1 or shop['selectedCategory'].lower()==predicted_category.lower():
                     resp_shops.append(shop)
                 
@@ -386,11 +412,13 @@ class ImageProcesingController(Resource):
             
             resp['stores']=resp_shops
 
+            print('final response',resp)
+
             response=make_response(jsonify(resp),201)
 
             return response
 
-            #TODO: get the predictions from the model 
+            
         except FileNotFoundError:
             print('file not found')
             return Response("File not found", status=404)
