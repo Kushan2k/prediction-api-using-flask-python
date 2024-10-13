@@ -457,7 +457,7 @@ class GetRecomendedTopicsController(Resource):
             resp=self.chat.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "give comma seperated values for toursit attraction places descriptive title acroding to my latitude and longitude only list"},
+                    {"role": "system", "content": "give comma seperated values for toursit attraction places descriptive title acroding to my latitude and longitude only list without numbering"},
                     {"role": "user", "content": f"my lat {lat},my lng {lng}"},
                     
                 ]
