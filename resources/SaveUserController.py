@@ -9,10 +9,13 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder,StandardScaler
 import numpy as np
 from firebase_admin import firestore
-
+from dotenv import load_dotenv
 import random
+import requests
+import json
+from openai import OpenAI
 
-
+load_dotenv()
 class SaveUserController(Resource):
 
     def __init__(self):
@@ -193,12 +196,6 @@ class SaveUserController(Resource):
         
             else:
                 return Response("Invalid value for P", status=400)
-    
-
-
-            
-            
-            
         
         except Exception as e:
             print(e)
@@ -213,7 +210,11 @@ class PredictUserController(Resource):
         self.collection = self.database.get_collection('users')
         self.model=load('models/user_cat.joblib')
         self.firestoreDB=firestore.client()
-        self.catagories=list(map(lambda x:x.to_dict()['name'].lower(),self.firestoreDB.collection('categories').stream()))
+        self.catagories=[
+            'historical','hotels','waterfall','mountain','rivers','beach',
+            'cenama','museum','zoo','park','amusement park','aquarium','art gallery',
+            'bakery','cafe','bar','restaurant','food court','grocery store','supermarket','shopping mall','clothing store','shoe store','jewelry store','electronics store','furniture store','book store','liquor store','convenience store','home goods store','department store','pharmacy','hardware store','pet store','florist','toy store','cosmetics store','sporting goods store','thrift store','antique store','mobile phone store','home improvement store','beauty supply store','dollar store','bicycle store','computer store','music store','pawn shop','pop-up shop'
+        ]
 
     def get(self):
         
@@ -245,7 +246,11 @@ class PredictUserController(Resource):
         parser = reqparse.RequestParser(bundle_errors=True)
         parser.add_argument('uid', type=str, help='uid can not be empty',required=True,location='json')
 
+        KEY=os.getenv('GOOGLE_API_KEY')
+
         parser.add_argument('email', type=str, help='email can not be empty',required=True,location='json')
+        parser.add_argument('lat', type=float, help='latitude is required',required=True,location='json')
+        parser.add_argument('lng', type=float, help='longitude is required',required=True,location='json')
         args = parser.parse_args()
 
         uid=args['uid']
@@ -300,33 +305,34 @@ class PredictUserController(Resource):
         predict=self.model.predict(np.array([row]).reshape(1,-1))[0]
 
         categories_for_user_type={
-            'A':random.sample(self.catagories,2),
-            'B':random.sample(self.catagories,2),
-            'C':random.sample(self.catagories,2),
-            'D':random.sample(self.catagories,2),
+            'A':random.sample(self.catagories,10),
+            'B':random.sample(self.catagories,10),
+            'C':random.sample(self.catagories,10),
+            'D':random.sample(self.catagories,10),
             
         }
 
-        stores=list(map(lambda x:x.to_dict(),self.firestoreDB.collection('stores').stream()))
-        
-        resp_shops=[]
+        # stores=list(map(lambda x:x.to_dict(),self.firestoreDB.collection('stores').stream()))
 
-        print(self.catagories)
-        print(categories_for_user_type[predict.upper()])
+        txt=','.join(categories_for_user_type[predict.upper()])
+        print(txt)
+        url='https://maps.googleapis.com/maps/api/place/nearbysearch/json'
 
-        for shop in stores:
-            if shop['selectedCategory'].lower() in categories_for_user_type[predict.upper()]:
-                resp_shops.append(shop)
-            
-            if(shop.get('items')==None):
-                    continue
-            
-            items=shop['items']
-            for item in items:
-                if item['category'].lower() in categories_for_user_type[predict.upper()]:
-                    resp_shops.append(shop)
-        
-        resp_user['stores']=resp_shops
+        google_resp=requests.get(url,
+            params={
+                'keyword':txt,
+                'location':f'{args['lat']},{args['lng']}',
+                'radius':50000,
+                'key':KEY
+            }     
+        )
+        res=google_resp.json()
+
+        print('map results =',type(res))
+        print('predicated categories =',categories_for_user_type[predict.upper()])
+        resp_user['stores']=res.get('results',[])
+
+        print('final response =',resp_user)
         
         resp=make_response((jsonify(resp_user),201))
 
@@ -377,19 +383,21 @@ class ImageProcesingController(Resource):
             prediction=Labels[best_one]
             print('prediction',prediction)
             
+            # get the stoes from the firebase 
             stores=list(map(lambda x:x.to_dict(),self.firestoreDB.collection('stores').stream()))
             resp={}
             resp['prediction']=prediction
             resp_shops=[]
             # print('came eher')
             cats={
-                'vegitable':['carrot','beetroot','turnip','sweetcorn','corn','cabbage','soy beans','cucumber','onion','lettuce','garlic','bell pepper','paprika','potato','capsicum','tomato','spinach','raddish','ginger'],
-                'fruit':['orange','banana','peas','eggplant','pineapple','pear','grapes','apple','pomegranate','watermelon','lemon','sweetpotato','kiwi','mango','chilli pepper']
+                'vegitables':['carrot','beetroot','turnip','sweetcorn','corn','cabbage','soy beans','cucumber','onion','lettuce','garlic','bell pepper','paprika','potato','capsicum','tomato','spinach','raddish','ginger'],
+                'fruits':['orange','banana','peas','eggplant','pineapple','pear','grapes','apple','pomegranate','watermelon','lemon','sweetpotato','kiwi','mango','chilli pepper']
             }
             predicted_category=''
             for key in cats.keys():
                 if prediction.lower() in cats[key]:
                     predicted_category=key
+                    resp['category']=predicted_category
                     break
 
             for shop in stores:
@@ -411,7 +419,7 @@ class ImageProcesingController(Resource):
                     
             
             resp['stores']=resp_shops
-
+            
             print('final response',resp)
 
             response=make_response(jsonify(resp),201)
@@ -427,3 +435,37 @@ class ImageProcesingController(Resource):
             return Response("Internal Server Error", status=500)
 
         
+class GetRecomendedTopicsController(Resource):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.chat:OpenAI=current_app.config['CHAT']
+
+    def get(self):
+        
+        parser=reqparse.RequestParser()
+        parser.add_argument('lat',type=float,required=True,help="User lat is required",location='args')
+        parser.add_argument('lng',type=float,required=True,help="User lng is required",location='args')
+
+        args=parser.parse_args()
+
+        lat=args['lat']
+        lng=args['lng']
+
+        try:
+            resp=self.chat.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "give comma seperated values for toursit attraction places descriptive title acroding to my latitude and longitude only list"},
+                    {"role": "user", "content": f"my lat {lat},my lng {lng}"},
+                    
+                ]
+            )
+            print(resp.choices[0].message.content)
+
+            
+            return Response(resp.choices[0].message.content,status=200)
+        except Exception as e:
+            print(e)
+            return Response("Internal Server Error", status=500)
