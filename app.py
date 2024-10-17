@@ -2,7 +2,7 @@ from flask import Flask
 from flask_restful import Api
 from dotenv import load_dotenv
 import os
-from resources.SaveUserController import SaveUserController,ImageProcesingController,PredictUserController,GetRecomendedTopicsController
+from resources.SaveUserController import SaveUserController,ImageProcesingController,PredictUserController,GetRecomendedTopicsController,GetSuggetionOnPrompt
 from flask_cors import CORS
 import connection
 import firebase_admin
@@ -27,6 +27,7 @@ api.add_resource(SaveUserController, '/')
 api.add_resource(ImageProcesingController, '/upload')
 api.add_resource(PredictUserController, '/predict')
 api.add_resource(GetRecomendedTopicsController,'/recomended')
+api.add_resource(GetSuggetionOnPrompt,'/suggetion')
 
 
 if __name__ == '__main__':

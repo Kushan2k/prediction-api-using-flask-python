@@ -469,3 +469,41 @@ class GetRecomendedTopicsController(Resource):
         except Exception as e:
             print(e)
             return Response("Internal Server Error", status=500)
+
+
+class GetSuggetionOnPrompt(Resource):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.chat:OpenAI=current_app.config['CHAT']
+
+    def get(self):
+
+        parser=reqparse.RequestParser()
+        parser.add_argument('prompt',type=str,required=True,help="Prompt is required",location='args')
+        parser.add_argument('lat',type=float,required=True,help="User lat is required",location='args')
+        parser.add_argument('lng',type=float,required=True,help="User lng is required",location='args')
+
+        args=parser.parse_args()
+
+        prompt=args['prompt']
+
+        lat=args['lat']
+        lng=args['lng']
+
+        try:
+            resp=self.chat.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": f"give me some comma seperated topics,place names,activitiy names acroding to the prompt and my latitude and longitude only list without numbering if can not give any thing just say nothing"},
+                    {"role": "user", "content": f"prompt is {prompt} my lat {lat},my lng {lng}"},
+                    
+                ]
+            )
+            print(resp.choices[0].message.content)
+
+            
+            return Response(resp.choices[0].message.content,status=200)
+        except Exception as e:
+            print(e)
+            return Response("Internal Server Error", status=500)
