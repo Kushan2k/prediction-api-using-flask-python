@@ -260,8 +260,37 @@ class PredictUserController(Resource):
         # print("come to try")
         user = self.collection.find_one(query, limit=1)
 
+        
         if not user:
-            return Response("user not found! ",status=404)
+            resp_user={
+                'userid':'12345',
+                'email':'guest@gmail.com',
+                'preferences':{},
+                'personal_data':{},
+            }
+            print('ran here')
+            url='https://maps.googleapis.com/maps/api/place/textsearch/json'
+
+            google_resp=requests.get(url,
+                params={
+                    'query':'resturants,grocery,bar',
+                    'location':f'{args['lat']},{args['lng']}',
+                    'radius':50000,
+                    'key':KEY
+                }     
+            )
+            res=google_resp.json()
+
+            print('map results =',res)
+            # print('predicated categories =',categories_for_user_type[predict.upper()])
+            resp_user['stores']=res.get('results',[])
+
+            print('final response =',resp_user)
+            
+            resp=make_response((jsonify(resp_user),201))
+
+            return resp
+            # return Response("user not found! ",status=404)
         
         resp_user={
             'userid':user['userid'],
@@ -316,11 +345,11 @@ class PredictUserController(Resource):
 
         txt=','.join(categories_for_user_type[predict.upper()])
         print(txt)
-        url='https://maps.googleapis.com/maps/api/place/nearbysearch/json'
+        url='https://maps.googleapis.com/maps/api/place/textsearch/json'
 
         google_resp=requests.get(url,
             params={
-                'keyword':txt,
+                'query':txt,
                 'location':f'{args['lat']},{args['lng']}',
                 'radius':50000,
                 'key':KEY
@@ -354,6 +383,12 @@ class ImageProcesingController(Resource):
         model=load('models/fruit_vegetable_model.joblib')
         # print('came')
         # print(request.files)
+
+        if 'lat' not in request.form or 'lng' not in request.form:
+            return Response("Latitude and Longitude are required", status=400)
+
+        lat = request.form['lat']
+        lng = request.form['lng']
 
         if 'file' not in request.files:
             print('No file part')
@@ -416,9 +451,18 @@ class ImageProcesingController(Resource):
                         resp_shops.append(shop)
                     if item['name'].lower().find(prediction.lower())!=-1:
                         resp_shops.append(shop)
+
+            based_on_location=[]
+
+            for shop in resp_shops:
+                if shop['location']['coords']['latitude'] in list(range(float(lat)-0.5,float(lat)+0.5))  or shop['location']['coords']['longitude'] in list(range(float(lng)-0.5,float(lng)+0.5)):
+                    based_on_location.append(shop)
                     
             
-            resp['stores']=resp_shops
+            if len(based_on_location)>0:
+                resp['stores']=based_on_location
+            else:
+                resp['stores']=resp_shops
             
             print('final response',resp)
 
@@ -495,7 +539,7 @@ class GetSuggetionOnPrompt(Resource):
             resp=self.chat.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": f"give me some comma seperated topics,place names,activitiy names acroding to the prompt and my latitude and longitude only list without numbering if can not give any thing just say nothing"},
+                    {"role": "system", "content": f"give me 2 or 3 comma seperated categories,place names to relavent this prompt give all the values formated like x,y,z without indicating categories and places"},
                     {"role": "user", "content": f"prompt is {prompt} my lat {lat},my lng {lng}"},
                     
                 ]
